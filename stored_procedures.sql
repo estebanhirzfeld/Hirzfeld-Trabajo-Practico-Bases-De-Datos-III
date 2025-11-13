@@ -15,10 +15,14 @@ CREATE PROCEDURE sp_create_user(
     OUT p_message VARCHAR(255)
 )
 BEGIN
+    DECLARE v_error_msg TEXT;
+    
     DECLARE EXIT HANDLER FOR SQLEXCEPTION
     BEGIN
+        GET DIAGNOSTICS CONDITION 1
+            v_error_msg = MESSAGE_TEXT;
         ROLLBACK;
-        SET p_message = 'Error: Could not create user';
+        SET p_message = CONCAT('Error: ', IFNULL(v_error_msg, 'Could not create user'));
         SET p_user_id = NULL;
     END;
     
@@ -262,5 +266,64 @@ BEGIN
         
         COMMIT;
     END IF;
+END //
+DELIMITER ;
+
+-- 6. PROCEDURE: Get Account Summary
+DELIMITER //
+CREATE PROCEDURE sp_get_account_summary(
+    IN p_user_id INT
+)
+BEGIN
+    SELECT 
+        a.account_id,
+        a.cvu,
+        a.alias,
+        a.balance,
+        a.currency,
+        a.status,
+        COUNT(DISTINCT t.transaction_id) as total_transactions,
+        COALESCE(SUM(CASE WHEN t.type = 'topup' THEN t.amount ELSE 0 END), 0) as total_topups,
+        COALESCE(SUM(CASE WHEN t.type IN ('payment', 'withdrawal', 'transfer') THEN t.amount ELSE 0 END), 0) as total_spent,
+        u.first_name,
+        u.last_name,
+        u.email
+    FROM account a
+    INNER JOIN user u ON a.user_id = u.user_id
+    LEFT JOIN transaction t ON a.account_id = t.account_id AND t.status = 'completed'
+    WHERE a.user_id = p_user_id
+    GROUP BY a.account_id, a.cvu, a.alias, a.balance, a.currency, a.status, u.first_name, u.last_name, u.email;
+END //
+DELIMITER ;
+
+-- 7. PROCEDURE: Get Spending by Category 
+
+DELIMITER //
+CREATE PROCEDURE sp_get_spending_by_category(
+    IN p_account_id INT
+)
+BEGIN
+    DECLARE v_start_date DATETIME;
+    SET v_start_date = DATE_SUB(NOW(), INTERVAL 30 DAY);
+    
+    SELECT 
+        tc.name as category_name,
+        tc.icon as category_icon,
+        COUNT(t.transaction_id) as transaction_count,
+        SUM(t.amount) as total_amount,
+        ROUND((SUM(t.amount) / (SELECT SUM(amount) 
+                                FROM transaction 
+                                WHERE account_id = p_account_id 
+                                AND type IN ('payment', 'withdrawal', 'transfer')
+                                AND status = 'completed'
+                                   AND date_time >= v_start_date) * 100), 2) as percentage
+    FROM transaction t
+    INNER JOIN transaction_category tc ON t.category_id = tc.category_id
+    WHERE t.account_id = p_account_id
+        AND t.type IN ('payment', 'withdrawal', 'transfer')
+        AND t.status = 'completed'
+        AND t.date_time >= v_start_date
+    GROUP BY tc.category_id, tc.name, tc.icon
+    ORDER BY total_amount DESC;
 END //
 DELIMITER ;

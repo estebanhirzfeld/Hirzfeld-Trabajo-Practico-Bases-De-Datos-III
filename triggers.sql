@@ -136,19 +136,28 @@ FOR EACH ROW
 BEGIN
     DECLARE v_cvu VARCHAR(22);
     DECLARE v_alias VARCHAR(50);
-    DECLARE v_random INT;
+    DECLARE v_random_part VARCHAR(10);
+    DECLARE v_alias_exists INT;
     
-    -- Generar CVU único (simulado)
-    SET v_random = FLOOR(RAND() * 1000000);
-    SET v_cvu = CONCAT('000000310001884', LPAD(NEW.user_id, 7, '0'), LPAD(v_random, 6, '0'));
+    -- Generar CVU único de exactamente 22 caracteres
+    -- Formato: 0000003100018845 (16 chars) + 6 dígitos únicos
+    SET v_random_part = LPAD(FLOOR(RAND() * 1000000), 6, '0');
+    SET v_cvu = CONCAT('0000003100018845', v_random_part);
     
-    -- Generar alias basado en nombre
+    -- Generar alias base
     SET v_alias = LOWER(CONCAT(
-        SUBSTRING(NEW.first_name, 1, 4), 
+        SUBSTRING(REPLACE(NEW.first_name, ' ', ''), 1, 4), 
         '.', 
-        SUBSTRING(NEW.last_name, 1, 4),
+        SUBSTRING(REPLACE(NEW.last_name, ' ', ''), 1, 4),
         '.wallet'
     ));
+    
+    -- Verificar si el alias existe y agregar número si es necesario
+    SELECT COUNT(*) INTO v_alias_exists FROM account WHERE alias = v_alias;
+    
+    IF v_alias_exists > 0 THEN
+        SET v_alias = CONCAT(v_alias, '.', NEW.user_id);
+    END IF;
     
     -- Crear cuenta automáticamente
     INSERT INTO account (user_id, cvu, alias, balance, currency, status)
