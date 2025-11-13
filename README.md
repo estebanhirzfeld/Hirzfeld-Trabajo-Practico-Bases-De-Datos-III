@@ -1,6 +1,10 @@
-# 💳 Electronic Wallet Database System
+# 💳 Virtual Wallet Database System
 
 Sistema de base de datos para una billetera electrónica desarrollado como proyecto académico para Bases de Datos III.
+
+## 📌 Diagrama
+
+![Diagrama Electronic Wallet](diagrama.png "Optional title")
 
 ## 📋 Descripción del Proyecto
 
